@@ -68,7 +68,7 @@ defmodule Schemecto do
     function = Keyword.fetch!(opts, :with)
     defaults = Keyword.get(opts, :defaults, %{})
 
-    unless is_function(function, 2) do
+    if not is_function(function, 2) do
       raise ArgumentError,
             "expected :with option to be a 2-arity function, got: #{inspect(function)}"
     end
@@ -79,9 +79,48 @@ defmodule Schemecto do
   @doc """
   Defines a nested validation for cardinality :many.
 
-  To be implemented.
+  ## Parameters
+
+    * `types` - Map of field names to their types for the nested changeset
+    * `opts` - Keyword list of options:
+      * `:with` - A 2-arity function that receives a changeset and params,
+        and returns a validated changeset (required)
+      * `:defaults` - Default values for each nested changeset (default: `%{}`)
+
+  ## Examples
+
+      def validate_tag(changeset, params) do
+        changeset
+        |> Ecto.Changeset.cast(params, [:name, :color])
+        |> Ecto.Changeset.validate_required([:name])
+      end
+
+      types = %{
+        title: :string,
+        tags: Schemecto.many(
+          %{name: :string, color: :string},
+          with: &validate_tag/2
+        )
+      }
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.cast(params, [:title, :tags])
+
   """
-  def many(_types, _function) do
-    raise "Schemecto.many/2 is not yet implemented"
+  def many(types, opts) when is_map(types) and is_list(opts) do
+    function = Keyword.fetch!(opts, :with)
+    defaults = Keyword.get(opts, :defaults, %{})
+
+    if not is_function(function, 2) do
+      raise ArgumentError,
+            "expected :with option to be a 2-arity function, got: #{inspect(function)}"
+    end
+
+    Ecto.ParameterizedType.init(Schemecto.Many, %{
+      types: types,
+      with: function,
+      defaults: defaults
+    })
   end
 end

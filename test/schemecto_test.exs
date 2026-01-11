@@ -9,23 +9,16 @@ defmodule SchemectoTest do
     |> Ecto.Changeset.validate_required([:street, :city])
   end
 
-  defp validate_address_with_length(changeset, params) do
+  defp validate_tag(changeset, params) do
     changeset
-    |> Ecto.Changeset.cast(params, [:street, :city, :zip])
-    |> Ecto.Changeset.validate_required([:street, :city])
-    |> Ecto.Changeset.validate_length(:zip, is: 5)
+    |> Ecto.Changeset.cast(params, [:name, :color])
+    |> Ecto.Changeset.validate_required([:name])
   end
 
-  defp validate_coordinates(changeset, params) do
+  defp validate_person(changeset, params) do
     changeset
-    |> Ecto.Changeset.cast(params, [:lat, :lon])
-    |> Ecto.Changeset.validate_required([:lat, :lon])
-  end
-
-  defp validate_address_with_coords(changeset, params) do
-    changeset
-    |> Ecto.Changeset.cast(params, [:street, :city, :coordinates])
-    |> Ecto.Changeset.validate_required([:street, :city])
+    |> Ecto.Changeset.cast(params, [:name, :address])
+    |> Ecto.Changeset.validate_required([:name])
   end
 
   describe "new/2" do
@@ -51,6 +44,7 @@ defmodule SchemectoTest do
 
     test "can cast params onto the changeset" do
       types = %{name: :string, age: :integer}
+
       changeset =
         Schemecto.new(types)
         |> Ecto.Changeset.cast(%{name: "Bob", age: 25}, [:name, :age])
@@ -119,10 +113,10 @@ defmodule SchemectoTest do
       assert {"is invalid", metadata} = changeset.errors[:address]
 
       assert [
-        type: {:parameterized, {Schemecto.One, _},
-        validation: :cast,
-        city: {"can't be blank", [validation: :required]}
-      ] = Enum.sort(metadata)
+               errors: [city: {"can't be blank", [validation: :required]}],
+               type: {:parameterized, {Schemecto.One, _}},
+               validation: :cast
+             ] = Enum.sort(metadata)
     end
 
     test "handles nil nested data" do
@@ -151,7 +145,8 @@ defmodule SchemectoTest do
 
       types = %{
         name: :string,
-        address: Schemecto.one(address_types, with: &validate_address/2, defaults: %{country: "US"})
+        address:
+          Schemecto.one(address_types, with: &validate_address/2, defaults: %{country: "US"})
       }
 
       params = %{
@@ -178,10 +173,198 @@ defmodule SchemectoTest do
   end
 
   describe "many/2" do
-    test "raises not implemented error" do
-      assert_raise RuntimeError, "Schemecto.many/2 is not yet implemented", fn ->
-        Schemecto.many(%{}, fn _, _ -> nil end)
-      end
+    test "validates list of nested data successfully" do
+      tag_types = %{name: :string, color: :string}
+
+      types = %{
+        title: :string,
+        tags: Schemecto.many(tag_types, with: &validate_tag/2)
+      }
+
+      params = %{
+        title: "My Post",
+        tags: [
+          %{name: "elixir", color: "purple"},
+          %{name: "ecto", color: "blue"},
+          %{name: "testing", color: "green"}
+        ]
+      }
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.cast(params, [:title, :tags])
+
+      assert changeset.valid?
+      assert Ecto.Changeset.get_change(changeset, :title) == "My Post"
+
+      [tag1, tag2, tag3] = Ecto.Changeset.get_change(changeset, :tags)
+
+      assert tag1.name == "elixir"
+      assert tag1.color == "purple"
+      assert tag2.name == "ecto"
+      assert tag2.color == "blue"
+      assert tag3.name == "testing"
+      assert tag3.color == "green"
+    end
+
+    test "handles invalid nested data in list" do
+      tag_types = %{name: :string, color: :string}
+
+      types = %{
+        title: :string,
+        tags: Schemecto.many(tag_types, with: &validate_tag/2)
+      }
+
+      params = %{
+        title: "My Post",
+        tags: [
+          %{name: "elixir", color: "purple"},
+          # Missing required name
+          %{color: "blue"}
+        ]
+      }
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.cast(params, [:title, :tags])
+
+      refute changeset.valid?
+      assert {"is invalid", metadata} = changeset.errors[:tags]
+
+      # Check that errors are nested under :errors key with indices
+      assert metadata[:errors] == [{1, [name: {"can't be blank", [validation: :required]}]}]
+      assert metadata[:validation] == :cast
+      assert {:parameterized, {Schemecto.Many, _}} = metadata[:type]
+    end
+
+    test "handles nil for many" do
+      tag_types = %{name: :string, color: :string}
+
+      types = %{
+        title: :string,
+        tags: Schemecto.many(tag_types, with: &validate_tag/2)
+      }
+
+      params = %{
+        title: "My Post",
+        tags: nil
+      }
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.cast(params, [:title, :tags])
+
+      assert changeset.valid?
+      assert Ecto.Changeset.get_change(changeset, :tags) == nil
+    end
+
+    test "handles empty list" do
+      tag_types = %{name: :string, color: :string}
+
+      types = %{
+        title: :string,
+        tags: Schemecto.many(tag_types, with: &validate_tag/2)
+      }
+
+      params = %{
+        title: "My Post",
+        tags: []
+      }
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.cast(params, [:title, :tags])
+
+      assert changeset.valid?
+      assert Ecto.Changeset.get_change(changeset, :tags) == []
+    end
+
+    test "uses defaults in nested changesets for many" do
+      tag_types = %{name: :string, color: :string, priority: :integer}
+
+      types = %{
+        title: :string,
+        tags: Schemecto.many(tag_types, with: &validate_tag/2, defaults: %{priority: 0})
+      }
+
+      params = %{
+        title: "My Post",
+        tags: [
+          %{name: "elixir", color: "purple"},
+          %{name: "ecto", color: "blue"}
+        ]
+      }
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.cast(params, [:title, :tags])
+
+      assert changeset.valid?
+
+      [tag1, tag2] = Ecto.Changeset.get_change(changeset, :tags)
+
+      assert tag1.priority == 0
+      assert tag2.priority == 0
+    end
+  end
+
+  describe "integration" do
+    test "one nested inside many" do
+      # Define types for the nested address (one)
+      address_types = %{street: :string, city: :string, zip: :string}
+
+      # Define types for the person that includes a nested address (one)
+      person_types = %{
+        name: :string,
+        address: Schemecto.one(address_types, with: &validate_address/2)
+      }
+
+      # Top level has a list of people (many)
+      types = %{
+        company: :string,
+        employees: Schemecto.many(person_types, with: &validate_person/2)
+      }
+
+      params = %{
+        company: "Acme Corp",
+        employees: [
+          %{
+            name: "Alice",
+            address: %{
+              street: "123 Main St",
+              city: "Boston",
+              zip: "02101"
+            }
+          },
+          %{
+            name: "Bob",
+            address: %{
+              street: "456 Oak Ave",
+              city: "Portland",
+              zip: "97201"
+            }
+          }
+        ]
+      }
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.cast(params, [:company, :employees])
+
+      assert changeset.valid?
+      assert Ecto.Changeset.get_change(changeset, :company) == "Acme Corp"
+
+      [alice, bob] = Ecto.Changeset.get_change(changeset, :employees)
+
+      assert alice.name == "Alice"
+      assert alice.address.street == "123 Main St"
+      assert alice.address.city == "Boston"
+      assert alice.address.zip == "02101"
+
+      assert bob.name == "Bob"
+      assert bob.address.street == "456 Oak Ave"
+      assert bob.address.city == "Portland"
+      assert bob.address.zip == "97201"
     end
   end
 end

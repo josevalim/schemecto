@@ -23,7 +23,7 @@ defmodule Schemecto.One do
         {:ok, Ecto.Changeset.apply_changes(cs)}
 
       %Ecto.Changeset{valid?: false, errors: errors} ->
-        {:error, errors}
+        {:error, [errors: errors]}
     end
   end
 
