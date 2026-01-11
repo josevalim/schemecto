@@ -46,22 +46,35 @@ Schemecto.to_json_schema(changeset)
 The generated schema includes required fields, format patterns, length constraints, numeric bounds, and enum fields from your changeset. For instance, the changeset above will emit:
 
 ```json
-%{
-  "properties" => %{
-    "address" => %{
-      "properties" => %{
-        "city" => %{"type" => "string"},
-        "street" => %{"type" => "string"},
-        "zip" => %{"maxLength" => 5, "minLength" => 5, "type" => "string"}
+{
+  "type": "object",
+  "properties": {
+    "address": {
+      "type": "object",
+      "properties": {
+        "city": {
+          "type": "string"
+        },
+        "street": {
+          "type": "string"
+        },
+        "zip": {
+          "type": "string",
+          "maxLength": 5,
+          "minLength": 5
+        }
       },
-      "required" => ["street", "city"],
-      "type" => "object"
+      "required": ["street", "city"]
     },
-    "email" => %{"pattern" => "@", "type" => "string"},
-    "name" => %{"type" => "string"}
+    "email": {
+      "type": "string",
+      "pattern": "@"
+    },
+    "name": {
+      "type": "string"
+    }
   },
-  "required" => ["name", "email"],
-  "type" => "object"
+  "required": ["name", "email"]
 }
 ```
 
