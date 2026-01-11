@@ -123,4 +123,77 @@ defmodule Schemecto do
       defaults: defaults
     })
   end
+
+  @doc """
+  Converts a changeset's types into JSON schema properties.
+
+  Takes a changeset and returns a map of JSON schema properties based on the
+  changeset's types. Raises an error for unknown types.
+
+  ## Examples
+
+      types = %{name: :string, age: :integer}
+      changeset = Schemecto.new(types)
+      Schemecto.to_json_properties(changeset)
+      # => %{
+      #   "name" => %{"type" => "string"},
+      #   "age" => %{"type" => "integer"}
+      # }
+
+  """
+  def to_json_properties(%Ecto.Changeset{types: types}) do
+    types
+    |> Enum.map(fn {field, type} ->
+      {to_string(field), type_to_json_schema(type)}
+    end)
+    |> Map.new()
+  end
+
+  defp type_to_json_schema(:string), do: %{"type" => "string"}
+  defp type_to_json_schema(:integer), do: %{"type" => "integer"}
+  defp type_to_json_schema(:float), do: %{"type" => "number"}
+  defp type_to_json_schema(:boolean), do: %{"type" => "boolean"}
+  defp type_to_json_schema(:map), do: %{"type" => "object"}
+
+  defp type_to_json_schema({:array, inner_type}) do
+    %{
+      "type" => "array",
+      "items" => type_to_json_schema(inner_type)
+    }
+  end
+
+  defp type_to_json_schema({:parameterized, {Schemecto.One, %{types: types}}}) do
+    nested_properties =
+      types
+      |> Enum.map(fn {field, type} ->
+        {to_string(field), type_to_json_schema(type)}
+      end)
+      |> Map.new()
+
+    %{
+      "type" => "object",
+      "properties" => nested_properties
+    }
+  end
+
+  defp type_to_json_schema({:parameterized, {Schemecto.Many, %{types: types}}}) do
+    nested_properties =
+      types
+      |> Enum.map(fn {field, type} ->
+        {to_string(field), type_to_json_schema(type)}
+      end)
+      |> Map.new()
+
+    %{
+      "type" => "array",
+      "items" => %{
+        "type" => "object",
+        "properties" => nested_properties
+      }
+    }
+  end
+
+  defp type_to_json_schema(unknown) do
+    raise ArgumentError, "unknown type given to to_json_properties: #{inspect(unknown)}"
+  end
 end

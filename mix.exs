@@ -16,6 +16,6 @@ defmodule Schemecto.MixProject do
   end
 
   defp deps do
-    [{:ecto, "~> 3.8"}]
+    [{:ecto, "~> 3.12"}]
   end
 end

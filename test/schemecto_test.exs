@@ -367,4 +367,127 @@ defmodule SchemectoTest do
       assert bob.address.zip == "97201"
     end
   end
+
+  describe "to_json_properties/1" do
+    test "converts all basic types to JSON schema properties" do
+      types = %{
+        name: :string,
+        age: :integer,
+        score: :float,
+        active: :boolean,
+        metadata: :map,
+        tags: {:array, :string},
+        priorities: {:array, :integer}
+      }
+
+      changeset = Schemecto.new(types)
+      properties = Schemecto.to_json_properties(changeset)
+
+      assert properties == %{
+               "name" => %{"type" => "string"},
+               "age" => %{"type" => "integer"},
+               "score" => %{"type" => "number"},
+               "active" => %{"type" => "boolean"},
+               "metadata" => %{"type" => "object"},
+               "tags" => %{"type" => "array", "items" => %{"type" => "string"}},
+               "priorities" => %{"type" => "array", "items" => %{"type" => "integer"}}
+             }
+    end
+
+    test "converts nested one type to JSON schema" do
+      address_types = %{street: :string, city: :string, zip: :string}
+
+      types = %{
+        name: :string,
+        address: Schemecto.one(address_types, with: &validate_address/2)
+      }
+
+      changeset = Schemecto.new(types)
+      properties = Schemecto.to_json_properties(changeset)
+
+      assert properties == %{
+               "name" => %{"type" => "string"},
+               "address" => %{
+                 "type" => "object",
+                 "properties" => %{
+                   "street" => %{"type" => "string"},
+                   "city" => %{"type" => "string"},
+                   "zip" => %{"type" => "string"}
+                 }
+               }
+             }
+    end
+
+    test "converts nested many type to JSON schema" do
+      tag_types = %{name: :string, color: :string}
+
+      types = %{
+        title: :string,
+        tags: Schemecto.many(tag_types, with: &validate_tag/2)
+      }
+
+      changeset = Schemecto.new(types)
+      properties = Schemecto.to_json_properties(changeset)
+
+      assert properties == %{
+               "title" => %{"type" => "string"},
+               "tags" => %{
+                 "type" => "array",
+                 "items" => %{
+                   "type" => "object",
+                   "properties" => %{
+                     "name" => %{"type" => "string"},
+                     "color" => %{"type" => "string"}
+                   }
+                 }
+               }
+             }
+    end
+
+    test "converts deeply nested types to JSON schema" do
+      address_types = %{street: :string, city: :string}
+
+      person_types = %{
+        name: :string,
+        address: Schemecto.one(address_types, with: &validate_address/2)
+      }
+
+      types = %{
+        company: :string,
+        employees: Schemecto.many(person_types, with: &validate_person/2)
+      }
+
+      changeset = Schemecto.new(types)
+      properties = Schemecto.to_json_properties(changeset)
+
+      assert properties == %{
+               "company" => %{"type" => "string"},
+               "employees" => %{
+                 "type" => "array",
+                 "items" => %{
+                   "type" => "object",
+                   "properties" => %{
+                     "name" => %{"type" => "string"},
+                     "address" => %{
+                       "type" => "object",
+                       "properties" => %{
+                         "street" => %{"type" => "string"},
+                         "city" => %{"type" => "string"}
+                       }
+                     }
+                   }
+                 }
+               }
+             }
+    end
+
+    test "raises error for unknown type" do
+      types = %{name: :unknown_type}
+      changeset = Schemecto.new(types)
+
+      assert_raise ArgumentError, "unknown type given to to_json_properties: :unknown_type", fn ->
+        Schemecto.to_json_properties(changeset)
+      end
+    end
+  end
 end
