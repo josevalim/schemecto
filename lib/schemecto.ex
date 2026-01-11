@@ -145,10 +145,15 @@ defmodule Schemecto do
       }
 
   """
-  def to_json_schema(%Ecto.Changeset{types: types, required: required}) do
+  def to_json_schema(%Ecto.Changeset{types: types, required: required, validations: validations}) do
     properties =
       Map.new(types, fn {field, type} ->
-        {to_string(field), type_to_json_schema(type)}
+        schema =
+          validations
+          |> Keyword.get_values(field)
+          |> Enum.reduce(type_to_json_schema(type), &apply_validation/2)
+
+        {to_string(field), schema}
       end)
 
     result = %{
@@ -224,5 +229,76 @@ defmodule Schemecto do
 
   defp do_type_to_json_schema(unknown) do
     raise ArgumentError, "unknown type given to to_json_schema: #{inspect(unknown)}"
+  end
+
+  # Validation appliers for each type
+
+  defp apply_validation({:format, regex}, schema) do
+    unless schema["type"] == "string" do
+      raise ArgumentError, "validate_format can only be applied to string fields"
+    end
+
+    Map.put(schema, "pattern", Regex.source(regex))
+  end
+
+  defp apply_validation({:inclusion, values}, schema) when is_list(values) do
+    Map.put(schema, "enum", values)
+  end
+
+  defp apply_validation({:inclusion, first..last//1}, schema) do
+    schema
+    |> Map.put("minimum", first)
+    |> Map.put("maximum", last)
+  end
+
+  defp apply_validation({:length, opts}, schema) do
+    case schema["type"] do
+      "string" -> apply_string_length(schema, opts)
+      "array" -> apply_array_length(schema, opts)
+      "object" -> apply_object_length(schema, opts)
+      _ -> schema
+    end
+  end
+
+  defp apply_validation({:number, opts}, schema) do
+    Enum.reduce(opts, schema, fn
+      {:greater_than, val}, acc -> Map.put(acc, "exclusiveMinimum", val)
+      {:less_than, val}, acc -> Map.put(acc, "exclusiveMaximum", val)
+      {:greater_than_or_equal_to, val}, acc -> Map.put(acc, "minimum", val)
+      {:less_than_or_equal_to, val}, acc -> Map.put(acc, "maximum", val)
+      {:equal_to, val}, acc -> Map.put(acc, "const", val)
+      _unknown, acc -> acc
+    end)
+  end
+
+  defp apply_validation({:subset, values}, schema) do
+    update_in(schema["items"], fn items ->
+      Map.put(items || %{}, "enum", values)
+    end)
+  end
+
+  defp apply_validation(_unknown, schema), do: schema
+
+  defp maybe_put(schema, _key, nil), do: schema
+  defp maybe_put(schema, key, value), do: Map.put(schema, key, value)
+
+  # Type-specific length handlers
+
+  defp apply_string_length(schema, opts) do
+    schema
+    |> maybe_put("minLength", opts[:is] || opts[:min])
+    |> maybe_put("maxLength", opts[:is] || opts[:max])
+  end
+
+  defp apply_array_length(schema, opts) do
+    schema
+    |> maybe_put("minItems", opts[:is] || opts[:min])
+    |> maybe_put("maxItems", opts[:is] || opts[:max])
+  end
+
+  defp apply_object_length(schema, opts) do
+    schema
+    |> maybe_put("minProperties", opts[:is] || opts[:min])
+    |> maybe_put("maxProperties", opts[:is] || opts[:max])
   end
 end

@@ -580,6 +580,222 @@ defmodule SchemectoTest do
                }
              }
     end
+  end
+
+  describe "to_json_schema + validations" do
+    test "extracts format validation to pattern" do
+      types = %{email: :string}
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.validate_format(:email, ~r/@/)
+
+      result = Schemecto.to_json_schema(changeset)
+
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "email" => %{"type" => "string", "pattern" => "@"}
+               }
+             }
+    end
+
+    test "extracts inclusion validation to enum for lists" do
+      types = %{status: :string}
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.validate_inclusion(:status, ["pending", "active", "completed"])
+
+      result = Schemecto.to_json_schema(changeset)
+
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "status" => %{"type" => "string", "enum" => ["pending", "active", "completed"]}
+               }
+             }
+    end
+
+    test "extracts inclusion validation with range to min/max" do
+      types = %{age: :integer}
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.validate_inclusion(:age, 0..120)
+
+      result = Schemecto.to_json_schema(changeset)
+
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "age" => %{"type" => "integer", "minimum" => 0, "maximum" => 120}
+               }
+             }
+    end
+
+    test "extracts length validation for strings with min/max" do
+      types = %{title: :string}
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.validate_length(:title, min: 1, max: 100)
+
+      result = Schemecto.to_json_schema(changeset)
+
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "title" => %{"type" => "string", "minLength" => 1, "maxLength" => 100}
+               }
+             }
+    end
+
+    test "extracts length validation for strings with is" do
+      types = %{code: :string}
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.validate_length(:code, is: 6)
+
+      result = Schemecto.to_json_schema(changeset)
+
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "code" => %{"type" => "string", "minLength" => 6, "maxLength" => 6}
+               }
+             }
+    end
+
+    test "extracts length validation for arrays" do
+      types = %{tags: {:array, :string}}
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.validate_length(:tags, min: 1, max: 5)
+
+      result = Schemecto.to_json_schema(changeset)
+
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "tags" => %{
+                   "type" => "array",
+                   "items" => %{"type" => "string"},
+                   "minItems" => 1,
+                   "maxItems" => 5
+                 }
+               }
+             }
+    end
+
+    test "extracts number validations" do
+      types = %{age: :integer}
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.validate_number(:age, greater_than_or_equal_to: 0, less_than: 150)
+
+      result = Schemecto.to_json_schema(changeset)
+
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "age" => %{"type" => "integer", "minimum" => 0, "exclusiveMaximum" => 150}
+               }
+             }
+    end
+
+    test "extracts subset validation for array items" do
+      types = %{tags: {:array, :string}}
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.validate_subset(:tags, ["elixir", "erlang", "ecto"])
+
+      result = Schemecto.to_json_schema(changeset)
+
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "tags" => %{
+                   "type" => "array",
+                   "items" => %{"type" => "string", "enum" => ["elixir", "erlang", "ecto"]}
+                 }
+               }
+             }
+    end
+
+    test "handles multiple validations on same field" do
+      types = %{title: :string}
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.validate_length(:title, min: 1)
+        |> Ecto.Changeset.validate_length(:title, max: 100)
+        |> Ecto.Changeset.validate_format(:title, ~r/^[A-Z]/)
+
+      result = Schemecto.to_json_schema(changeset)
+
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "title" => %{
+                   "type" => "string",
+                   "minLength" => 1,
+                   "maxLength" => 100,
+                   "pattern" => "^[A-Z]"
+                 }
+               }
+             }
+    end
+
+    test "handles nested validations in one/many" do
+      address_types = %{street: :string, zip: :string}
+
+      validate_address = fn changeset, params ->
+        changeset
+        |> Ecto.Changeset.cast(params, [:street, :zip])
+        |> Ecto.Changeset.validate_required([:street])
+        |> Ecto.Changeset.validate_length(:zip, is: 5)
+      end
+
+      types = %{
+        name: :string,
+        address: Schemecto.one(address_types, with: validate_address)
+      }
+
+      changeset = Schemecto.new(types)
+      result = Schemecto.to_json_schema(changeset)
+
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "name" => %{"type" => "string"},
+                 "address" => %{
+                   "type" => "object",
+                   "properties" => %{
+                     "street" => %{"type" => "string"},
+                     "zip" => %{"type" => "string", "minLength" => 5, "maxLength" => 5}
+                   },
+                   "required" => ["street"]
+                 }
+               }
+             }
+    end
+
+    test "raises when format validation on non-string field" do
+      types = %{age: :integer}
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.validate_format(:age, ~r/\d+/)
+
+      assert_raise ArgumentError, "validate_format can only be applied to string fields", fn ->
+        Schemecto.to_json_schema(changeset)
+      end
+    end
 
     test "raises error for unknown type" do
       types = %{name: :unknown_type}
