@@ -1,7 +1,6 @@
 defmodule Schemecto do
   @moduledoc """
-  Builds schemaless changesets, with support for nesting
-  and JSON conversion.
+  Schemaless Ecto changesets with support for nesting and JSON Schemas.
   """
 
   @doc """
