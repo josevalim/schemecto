@@ -481,6 +481,21 @@ defmodule SchemectoTest do
              }
     end
 
+    test "converts custom Ecto types to JSON schema" do
+      types = %{
+        custom_name: Schemecto.Test.CustomString,
+        regular_name: :string
+      }
+
+      changeset = Schemecto.new(types)
+      properties = Schemecto.to_json_properties(changeset)
+
+      assert properties == %{
+               "custom_name" => %{"type" => "string"},
+               "regular_name" => %{"type" => "string"}
+             }
+    end
+
     test "raises error for unknown type" do
       types = %{name: :unknown_type}
       changeset = Schemecto.new(types)

@@ -132,13 +132,13 @@ defmodule Schemecto do
 
   ## Examples
 
-      types = %{name: :string, age: :integer}
-      changeset = Schemecto.new(types)
-      Schemecto.to_json_properties(changeset)
-      # => %{
-      #   "name" => %{"type" => "string"},
-      #   "age" => %{"type" => "integer"}
-      # }
+      iex> types = %{name: :string, age: :integer}
+      iex> changeset = Schemecto.new(types)
+      iex> Schemecto.to_json_properties(changeset)
+      %{
+        "name" => %{"type" => "string"},
+        "age" => %{"type" => "integer"}
+      }
 
   """
   def to_json_properties(%Ecto.Changeset{types: types}) do
@@ -149,19 +149,7 @@ defmodule Schemecto do
     |> Map.new()
   end
 
-  defp type_to_json_schema(:string), do: %{"type" => "string"}
-  defp type_to_json_schema(:integer), do: %{"type" => "integer"}
-  defp type_to_json_schema(:float), do: %{"type" => "number"}
-  defp type_to_json_schema(:boolean), do: %{"type" => "boolean"}
-  defp type_to_json_schema(:map), do: %{"type" => "object"}
-
-  defp type_to_json_schema({:array, inner_type}) do
-    %{
-      "type" => "array",
-      "items" => type_to_json_schema(inner_type)
-    }
-  end
-
+  # Handle Schemecto parameterized types first (before calling Ecto.Type.type)
   defp type_to_json_schema({:parameterized, {Schemecto.One, %{types: types}}}) do
     nested_properties =
       types
@@ -193,7 +181,32 @@ defmodule Schemecto do
     }
   end
 
-  defp type_to_json_schema(unknown) do
+  # For all other types, get the underlying type using Ecto.Type.type/1
+  defp type_to_json_schema(type) do
+    try do
+      Ecto.Type.type(type)
+    rescue
+      UndefinedFunctionError ->
+        raise ArgumentError, "unknown type given to to_json_properties: #{inspect(type)}"
+    else
+      type -> do_type_to_json_schema(type)
+    end
+  end
+
+  defp do_type_to_json_schema(:string), do: %{"type" => "string"}
+  defp do_type_to_json_schema(:integer), do: %{"type" => "integer"}
+  defp do_type_to_json_schema(:float), do: %{"type" => "number"}
+  defp do_type_to_json_schema(:boolean), do: %{"type" => "boolean"}
+  defp do_type_to_json_schema(:map), do: %{"type" => "object"}
+
+  defp do_type_to_json_schema({:array, inner_type}) do
+    %{
+      "type" => "array",
+      "items" => type_to_json_schema(inner_type)
+    }
+  end
+
+  defp do_type_to_json_schema(unknown) do
     raise ArgumentError, "unknown type given to to_json_properties: #{inspect(unknown)}"
   end
 end

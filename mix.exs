@@ -7,6 +7,7 @@ defmodule Schemecto.MixProject do
       version: "0.1.0",
       elixir: "~> 1.20-rc",
       start_permanent: Mix.env() == :prod,
+      elixirc_paths: if(Mix.env() == :test, do: ["lib", "test/support"], else: ["lib"]),
       deps: deps()
     ]
   end
