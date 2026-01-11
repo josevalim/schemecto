@@ -2,7 +2,7 @@ defmodule Schemecto.Test.CustomString do
   @moduledoc """
   A custom Ecto type that wraps `:string`.
 
-  Used for testing custom type support in `to_json_properties`.
+  Used for testing custom type support in `to_json_schema`.
   """
   use Ecto.Type
 

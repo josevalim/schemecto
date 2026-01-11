@@ -21,6 +21,12 @@ defmodule SchemectoTest do
     |> Ecto.Changeset.validate_required([:name])
   end
 
+  defp validate_address_simple(changeset, params) do
+    changeset
+    |> Ecto.Changeset.cast(params, [:street, :city])
+    |> Ecto.Changeset.validate_required([:street, :city])
+  end
+
   describe "new/2" do
     test "creates a schemaless changeset with empty defaults" do
       types = %{name: :string, age: :integer}
@@ -368,7 +374,7 @@ defmodule SchemectoTest do
     end
   end
 
-  describe "to_json_properties/1" do
+  describe "to_json_schema/1" do
     test "converts all basic types to JSON schema properties" do
       types = %{
         name: :string,
@@ -377,20 +383,25 @@ defmodule SchemectoTest do
         active: :boolean,
         metadata: :map,
         tags: {:array, :string},
-        priorities: {:array, :integer}
+        priorities: {:array, :integer},
+        items: {:array, :any}
       }
 
       changeset = Schemecto.new(types)
-      properties = Schemecto.to_json_properties(changeset)
+      result = Schemecto.to_json_schema(changeset)
 
-      assert properties == %{
-               "name" => %{"type" => "string"},
-               "age" => %{"type" => "integer"},
-               "score" => %{"type" => "number"},
-               "active" => %{"type" => "boolean"},
-               "metadata" => %{"type" => "object"},
-               "tags" => %{"type" => "array", "items" => %{"type" => "string"}},
-               "priorities" => %{"type" => "array", "items" => %{"type" => "integer"}}
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "name" => %{"type" => "string"},
+                 "age" => %{"type" => "integer"},
+                 "score" => %{"type" => "number"},
+                 "active" => %{"type" => "boolean"},
+                 "metadata" => %{"type" => "object"},
+                 "tags" => %{"type" => "array", "items" => %{"type" => "string"}},
+                 "priorities" => %{"type" => "array", "items" => %{"type" => "integer"}},
+                 "items" => %{"type" => "array", "items" => %{}}
+               }
              }
     end
 
@@ -403,16 +414,20 @@ defmodule SchemectoTest do
       }
 
       changeset = Schemecto.new(types)
-      properties = Schemecto.to_json_properties(changeset)
+      result = Schemecto.to_json_schema(changeset)
 
-      assert properties == %{
-               "name" => %{"type" => "string"},
-               "address" => %{
-                 "type" => "object",
-                 "properties" => %{
-                   "street" => %{"type" => "string"},
-                   "city" => %{"type" => "string"},
-                   "zip" => %{"type" => "string"}
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "name" => %{"type" => "string"},
+                 "address" => %{
+                   "type" => "object",
+                   "properties" => %{
+                     "street" => %{"type" => "string"},
+                     "city" => %{"type" => "string"},
+                     "zip" => %{"type" => "string"}
+                   },
+                   "required" => ["street", "city"]
                  }
                }
              }
@@ -427,17 +442,21 @@ defmodule SchemectoTest do
       }
 
       changeset = Schemecto.new(types)
-      properties = Schemecto.to_json_properties(changeset)
+      result = Schemecto.to_json_schema(changeset)
 
-      assert properties == %{
-               "title" => %{"type" => "string"},
-               "tags" => %{
-                 "type" => "array",
-                 "items" => %{
-                   "type" => "object",
-                   "properties" => %{
-                     "name" => %{"type" => "string"},
-                     "color" => %{"type" => "string"}
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "title" => %{"type" => "string"},
+                 "tags" => %{
+                   "type" => "array",
+                   "items" => %{
+                     "type" => "object",
+                     "properties" => %{
+                       "name" => %{"type" => "string"},
+                       "color" => %{"type" => "string"}
+                     },
+                     "required" => ["name"]
                    }
                  }
                }
@@ -449,7 +468,7 @@ defmodule SchemectoTest do
 
       person_types = %{
         name: :string,
-        address: Schemecto.one(address_types, with: &validate_address/2)
+        address: Schemecto.one(address_types, with: &validate_address_simple/2)
       }
 
       types = %{
@@ -458,23 +477,28 @@ defmodule SchemectoTest do
       }
 
       changeset = Schemecto.new(types)
-      properties = Schemecto.to_json_properties(changeset)
+      result = Schemecto.to_json_schema(changeset)
 
-      assert properties == %{
-               "company" => %{"type" => "string"},
-               "employees" => %{
-                 "type" => "array",
-                 "items" => %{
-                   "type" => "object",
-                   "properties" => %{
-                     "name" => %{"type" => "string"},
-                     "address" => %{
-                       "type" => "object",
-                       "properties" => %{
-                         "street" => %{"type" => "string"},
-                         "city" => %{"type" => "string"}
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "company" => %{"type" => "string"},
+                 "employees" => %{
+                   "type" => "array",
+                   "items" => %{
+                     "type" => "object",
+                     "properties" => %{
+                       "name" => %{"type" => "string"},
+                       "address" => %{
+                         "type" => "object",
+                         "properties" => %{
+                           "street" => %{"type" => "string"},
+                           "city" => %{"type" => "string"}
+                         },
+                         "required" => ["street", "city"]
                        }
-                     }
+                     },
+                     "required" => ["name"]
                    }
                  }
                }
@@ -488,11 +512,72 @@ defmodule SchemectoTest do
       }
 
       changeset = Schemecto.new(types)
-      properties = Schemecto.to_json_properties(changeset)
+      result = Schemecto.to_json_schema(changeset)
 
-      assert properties == %{
-               "custom_name" => %{"type" => "string"},
-               "regular_name" => %{"type" => "string"}
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "custom_name" => %{"type" => "string"},
+                 "regular_name" => %{"type" => "string"}
+               }
+             }
+    end
+
+    test "adds required fields to JSON schema" do
+      types = %{name: :string, age: :integer, email: :string}
+
+      changeset =
+        Schemecto.new(types)
+        |> Ecto.Changeset.validate_required([:name, :email])
+
+      result = Schemecto.to_json_schema(changeset)
+
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "name" => %{"type" => "string"},
+                 "age" => %{"type" => "integer"},
+                 "email" => %{"type" => "string"}
+               },
+               "required" => ["name", "email"]
+             }
+    end
+
+    test "converts Ecto.Enum string types to JSON schema" do
+      types = %{
+        status: Ecto.ParameterizedType.init(Ecto.Enum, values: [:pending, :active, :completed])
+      }
+
+      changeset = Schemecto.new(types)
+      result = Schemecto.to_json_schema(changeset)
+
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "status" => %{
+                   "type" => "string",
+                   "enum" => ["pending", "active", "completed"]
+                 }
+               }
+             }
+    end
+
+    test "converts Ecto.Enum integer types to JSON schema" do
+      types = %{
+        priority: Ecto.ParameterizedType.init(Ecto.Enum, values: [low: 1, medium: 2, high: 3])
+      }
+
+      changeset = Schemecto.new(types)
+      result = Schemecto.to_json_schema(changeset)
+
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "priority" => %{
+                   "type" => "integer",
+                   "enum" => [1, 2, 3]
+                 }
+               }
              }
     end
 
@@ -500,8 +585,8 @@ defmodule SchemectoTest do
       types = %{name: :unknown_type}
       changeset = Schemecto.new(types)
 
-      assert_raise ArgumentError, "unknown type given to to_json_properties: :unknown_type", fn ->
-        Schemecto.to_json_properties(changeset)
+      assert_raise ArgumentError, "unknown type given to to_json_schema: :unknown_type", fn ->
+        Schemecto.to_json_schema(changeset)
       end
     end
   end

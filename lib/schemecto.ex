@@ -124,59 +124,69 @@ defmodule Schemecto do
   end
 
   @doc """
-  Converts a changeset's types into JSON schema properties.
+  Converts a changeset's types into a JSON schema.
 
-  Takes a changeset and returns a map of JSON schema properties based on the
-  changeset's types. Raises an error for unknown types.
+  Takes a changeset and returns a JSON schema based on the changeset's metadata.
+
+  Note the "$schema" property is not included in the schema for easier embedding,
+  but it is recommended to be set to "https://json-schema.org/draft/2020-12/schema".
 
   ## Examples
 
       iex> types = %{name: :string, age: :integer}
       iex> changeset = Schemecto.new(types)
-      iex> Schemecto.to_json_properties(changeset)
+      iex> Schemecto.to_json_schema(changeset)
       %{
-        "name" => %{"type" => "string"},
-        "age" => %{"type" => "integer"}
+        "type" => "object",
+        "properties" => %{
+          "name" => %{"type" => "string"},
+          "age" => %{"type" => "integer"}
+        }
       }
 
   """
-  def to_json_properties(%Ecto.Changeset{types: types}) do
-    types
-    |> Enum.map(fn {field, type} ->
-      {to_string(field), type_to_json_schema(type)}
-    end)
-    |> Map.new()
-  end
-
-  # Handle Schemecto parameterized types first (before calling Ecto.Type.type)
-  defp type_to_json_schema({:parameterized, {Schemecto.One, %{types: types}}}) do
-    nested_properties =
-      types
-      |> Enum.map(fn {field, type} ->
+  def to_json_schema(%Ecto.Changeset{types: types, required: required}) do
+    properties =
+      Map.new(types, fn {field, type} ->
         {to_string(field), type_to_json_schema(type)}
       end)
-      |> Map.new()
 
-    %{
+    result = %{
       "type" => "object",
-      "properties" => nested_properties
+      "properties" => properties
     }
+
+    if required == [] do
+      result
+    else
+      required_fields = Enum.map(required, &to_string/1)
+      Map.put(result, "required", required_fields)
+    end
   end
 
-  defp type_to_json_schema({:parameterized, {Schemecto.Many, %{types: types}}}) do
-    nested_properties =
-      types
-      |> Enum.map(fn {field, type} ->
-        {to_string(field), type_to_json_schema(type)}
-      end)
-      |> Map.new()
+  defp type_to_json_schema({:parameterized, {Ecto.Enum, params}} = type) do
+    Ecto.Enum.type(params)
+    |> type_to_json_schema()
+    |> Map.put("enum", Ecto.Enum.dump_values(%{field: type}, :field))
+  end
+
+  defp type_to_json_schema({:parameterized, {Schemecto.One, one}}) do
+    %{types: types, with: fun, defaults: defaults} = one
+
+    Ecto.Changeset.change({defaults, types})
+    |> fun.(%{})
+    |> to_json_schema()
+  end
+
+  defp type_to_json_schema({:parameterized, {Schemecto.Many, many}}) do
+    %{types: types, with: fun, defaults: defaults} = many
 
     %{
       "type" => "array",
-      "items" => %{
-        "type" => "object",
-        "properties" => nested_properties
-      }
+      "items" =>
+        Ecto.Changeset.change({defaults, types})
+        |> fun.(%{})
+        |> to_json_schema()
     }
   end
 
@@ -186,7 +196,7 @@ defmodule Schemecto do
       Ecto.Type.type(type)
     rescue
       UndefinedFunctionError ->
-        raise ArgumentError, "unknown type given to to_json_properties: #{inspect(type)}"
+        raise ArgumentError, "unknown type given to to_json_schema: #{inspect(type)}"
     else
       type -> do_type_to_json_schema(type)
     end
@@ -198,6 +208,13 @@ defmodule Schemecto do
   defp do_type_to_json_schema(:boolean), do: %{"type" => "boolean"}
   defp do_type_to_json_schema(:map), do: %{"type" => "object"}
 
+  defp do_type_to_json_schema({:array, :any}) do
+    %{
+      "type" => "array",
+      "items" => %{}
+    }
+  end
+
   defp do_type_to_json_schema({:array, inner_type}) do
     %{
       "type" => "array",
@@ -206,6 +223,6 @@ defmodule Schemecto do
   end
 
   defp do_type_to_json_schema(unknown) do
-    raise ArgumentError, "unknown type given to to_json_properties: #{inspect(unknown)}"
+    raise ArgumentError, "unknown type given to to_json_schema: #{inspect(unknown)}"
   end
 end
