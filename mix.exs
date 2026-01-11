@@ -44,9 +44,8 @@ defmodule Schemecto.MixProject do
 
   defp docs do
     [
-      # The main page in the docs
       main: "readme",
-      extras: ["README.md"]
+      extras: ["README.md"],
       source_ref: "v#{@version}",
       source_url: @repo_url
     ]
