@@ -6,6 +6,10 @@ defmodule Schemecto do
   @doc """
   Creates a new schemaless changeset with the given field definitions.
 
+  If parameters are given, they are cast into the changeset according
+  to fields. Parameters are a keyword list, a map of string or atom keys,
+  or nil.
+
   ## Parameters
 
     * `fields` - List of field definitions. Each field is a map with:
@@ -23,12 +27,19 @@ defmodule Schemecto do
         %{name: :age, type: :integer, default: 0, description: "Age in years"}
       ]
 
-      changeset = Schemecto.new(fields)
-      changeset = Ecto.Changeset.cast(changeset, %{name: "John", age: 30}, [:name, :age])
+      params = %{"name" => "John", "age" => 30}
+      changeset = Schemecto.new(fields, params)
 
   """
-  def new(fields) when is_list(fields) do
-    build_changeset(fields)
+  def new(fields, params \\ %{})
+      when is_list(fields) and (is_list(params) or is_map(params) or params == nil) do
+    changeset = build_changeset(fields)
+
+    if params == [] or params == %{} or params == nil do
+      changeset
+    else
+      Ecto.Changeset.cast(changeset, params, Map.keys(changeset.types))
+    end
   end
 
   @doc """
@@ -38,14 +49,13 @@ defmodule Schemecto do
 
     * `fields` - List of field definitions for the nested changeset
     * `opts` - Keyword list of options:
-      * `:with` - A 2-arity function that receives a changeset and params,
-        and returns a validated changeset (required)
+      * `:with` - A 1-arity function that receives a changeset
+        with the parameters already cast into them (if any) (required)
 
   ## Examples
 
-      def validate_address(changeset, params) do
+      def validate_address(changeset) do
         changeset
-        |> Ecto.Changeset.cast(params, [:street, :city, :zip])
         |> Ecto.Changeset.validate_required([:street, :city])
       end
 
@@ -58,21 +68,19 @@ defmodule Schemecto do
             %{name: :city, type: :string},
             %{name: :zip, type: :string}
           ],
-          with: &validate_address/2
+          with: &validate_address/1
         )}
       ]
 
-      changeset =
-        Schemecto.new(fields)
-        |> Ecto.Changeset.cast(params, [:name, :email, :address])
+      changeset = Schemecto.new(fields, params)
 
   """
   def one(fields, opts) when is_list(fields) and is_list(opts) do
     function = Keyword.fetch!(opts, :with)
 
-    if not is_function(function, 2) do
+    if not is_function(function, 1) do
       raise ArgumentError,
-            "expected :with option to be a 2-arity function, got: #{inspect(function)}"
+            "expected :with option to be a 1-arity function, got: #{inspect(function)}"
     end
 
     Ecto.ParameterizedType.init(Schemecto.One, %{
@@ -93,9 +101,8 @@ defmodule Schemecto do
 
   ## Examples
 
-      def validate_tag(changeset, params) do
+      def validate_tag(changeset) do
         changeset
-        |> Ecto.Changeset.cast(params, [:name, :color])
         |> Ecto.Changeset.validate_required([:name])
       end
 
@@ -106,21 +113,19 @@ defmodule Schemecto do
             %{name: :name, type: :string},
             %{name: :color, type: :string}
           ],
-          with: &validate_tag/2
+          with: &validate_tag/1
         )}
       ]
 
-      changeset =
-        Schemecto.new(fields)
-        |> Ecto.Changeset.cast(params, [:title, :tags])
+      changeset = Schemecto.new(fields, params)
 
   """
   def many(fields, opts) when is_list(fields) and is_list(opts) do
     function = Keyword.fetch!(opts, :with)
 
-    if not is_function(function, 2) do
+    if not is_function(function, 1) do
       raise ArgumentError,
-            "expected :with option to be a 2-arity function, got: #{inspect(function)}"
+            "expected :with option to be a 1-arity function, got: #{inspect(function)}"
     end
 
     Ecto.ParameterizedType.init(Schemecto.Many, %{
@@ -250,18 +255,13 @@ defmodule Schemecto do
   end
 
   defp type_to_json_schema({:parameterized, {Schemecto.One, %{changeset: changeset, with: fun}}}) do
-    changeset
-    |> fun.(%{})
-    |> to_json_schema()
+    changeset |> fun.() |> to_json_schema()
   end
 
   defp type_to_json_schema({:parameterized, {Schemecto.Many, %{changeset: changeset, with: fun}}}) do
     %{
       "type" => "array",
-      "items" =>
-        changeset
-        |> fun.(%{})
-        |> to_json_schema()
+      "items" => changeset |> fun.() |> to_json_schema()
     }
   end
 

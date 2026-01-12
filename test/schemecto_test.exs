@@ -3,31 +3,27 @@ defmodule SchemectoTest do
   doctest Schemecto
 
   # Helper functions for validation
-  defp validate_address(changeset, params) do
+  defp validate_address(changeset) do
     changeset
-    |> Ecto.Changeset.cast(params, [:street, :city, :zip])
     |> Ecto.Changeset.validate_required([:street, :city])
   end
 
-  defp validate_tag(changeset, params) do
+  defp validate_tag(changeset) do
     changeset
-    |> Ecto.Changeset.cast(params, [:name, :color])
     |> Ecto.Changeset.validate_required([:name])
   end
 
-  defp validate_person(changeset, params) do
+  defp validate_person(changeset) do
     changeset
-    |> Ecto.Changeset.cast(params, [:name, :address])
     |> Ecto.Changeset.validate_required([:name])
   end
 
-  defp validate_address_simple(changeset, params) do
+  defp validate_address_simple(changeset) do
     changeset
-    |> Ecto.Changeset.cast(params, [:street, :city])
     |> Ecto.Changeset.validate_required([:street, :city])
   end
 
-  describe "new/1" do
+  describe "new/2" do
     test "creates a schemaless changeset with empty defaults" do
       fields = [
         %{name: :name, type: :string},
@@ -61,13 +57,22 @@ defmodule SchemectoTest do
         %{name: :age, type: :integer}
       ]
 
-      changeset =
-        Schemecto.new(fields)
-        |> Ecto.Changeset.cast(%{name: "Bob", age: 25}, [:name, :age])
+      changeset = Schemecto.new(fields, %{name: "Bob", age: 25})
 
       assert changeset.valid?
+      assert changeset.params == %{"name" => "Bob", "age" => 25}
       assert Ecto.Changeset.get_change(changeset, :name) == "Bob"
       assert Ecto.Changeset.get_change(changeset, :age) == 25
+    end
+
+    test "accepts nil params" do
+      fields = [
+        %{name: :name, type: :string},
+        %{name: :age, type: :integer}
+      ]
+
+      changeset = Schemecto.new(fields, nil)
+      assert changeset.valid?
     end
   end
 
@@ -82,7 +87,7 @@ defmodule SchemectoTest do
       fields = [
         %{name: :name, type: :string},
         %{name: :email, type: :string},
-        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/2)}
+        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/1)}
       ]
 
       params = %{
@@ -95,9 +100,7 @@ defmodule SchemectoTest do
         }
       }
 
-      changeset =
-        Schemecto.new(fields)
-        |> Ecto.Changeset.cast(params, [:name, :email, :address])
+      changeset = Schemecto.new(fields, params)
 
       assert changeset.valid?
       assert Ecto.Changeset.get_change(changeset, :name) == "John Doe"
@@ -118,7 +121,7 @@ defmodule SchemectoTest do
 
       fields = [
         %{name: :name, type: :string},
-        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/2)}
+        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/1)}
       ]
 
       params = %{
@@ -129,9 +132,7 @@ defmodule SchemectoTest do
         }
       }
 
-      changeset =
-        Schemecto.new(fields)
-        |> Ecto.Changeset.cast(params, [:name, :address])
+      changeset = Schemecto.new(fields, params)
 
       refute changeset.valid?
       assert {"is invalid", metadata} = changeset.errors[:address]
@@ -152,7 +153,7 @@ defmodule SchemectoTest do
 
       fields = [
         %{name: :name, type: :string},
-        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/2)}
+        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/1)}
       ]
 
       params = %{
@@ -160,9 +161,7 @@ defmodule SchemectoTest do
         address: nil
       }
 
-      changeset =
-        Schemecto.new(fields)
-        |> Ecto.Changeset.cast(params, [:name, :address])
+      changeset = Schemecto.new(fields, params)
 
       assert changeset.valid?
       assert Ecto.Changeset.get_change(changeset, :address) == nil
@@ -178,7 +177,7 @@ defmodule SchemectoTest do
 
       fields = [
         %{name: :name, type: :string},
-        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/2)}
+        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/1)}
       ]
 
       params = %{
@@ -190,9 +189,7 @@ defmodule SchemectoTest do
         }
       }
 
-      changeset =
-        Schemecto.new(fields)
-        |> Ecto.Changeset.cast(params, [:name, :address])
+      changeset = Schemecto.new(fields, params)
 
       assert changeset.valid?
 
@@ -213,7 +210,7 @@ defmodule SchemectoTest do
 
       fields = [
         %{name: :title, type: :string},
-        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/2)}
+        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/1)}
       ]
 
       params = %{
@@ -225,9 +222,7 @@ defmodule SchemectoTest do
         ]
       }
 
-      changeset =
-        Schemecto.new(fields)
-        |> Ecto.Changeset.cast(params, [:title, :tags])
+      changeset = Schemecto.new(fields, params)
 
       assert changeset.valid?
       assert Ecto.Changeset.get_change(changeset, :title) == "My Post"
@@ -250,7 +245,7 @@ defmodule SchemectoTest do
 
       fields = [
         %{name: :title, type: :string},
-        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/2)}
+        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/1)}
       ]
 
       params = %{
@@ -262,9 +257,7 @@ defmodule SchemectoTest do
         ]
       }
 
-      changeset =
-        Schemecto.new(fields)
-        |> Ecto.Changeset.cast(params, [:title, :tags])
+      changeset = Schemecto.new(fields, params)
 
       refute changeset.valid?
       assert {"is invalid", metadata} = changeset.errors[:tags]
@@ -283,7 +276,7 @@ defmodule SchemectoTest do
 
       fields = [
         %{name: :title, type: :string},
-        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/2)}
+        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/1)}
       ]
 
       params = %{
@@ -291,9 +284,7 @@ defmodule SchemectoTest do
         tags: nil
       }
 
-      changeset =
-        Schemecto.new(fields)
-        |> Ecto.Changeset.cast(params, [:title, :tags])
+      changeset = Schemecto.new(fields, params)
 
       assert changeset.valid?
       assert Ecto.Changeset.get_change(changeset, :tags) == nil
@@ -307,7 +298,7 @@ defmodule SchemectoTest do
 
       fields = [
         %{name: :title, type: :string},
-        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/2)}
+        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/1)}
       ]
 
       params = %{
@@ -315,9 +306,7 @@ defmodule SchemectoTest do
         tags: []
       }
 
-      changeset =
-        Schemecto.new(fields)
-        |> Ecto.Changeset.cast(params, [:title, :tags])
+      changeset = Schemecto.new(fields, params)
 
       assert changeset.valid?
       assert Ecto.Changeset.get_change(changeset, :tags) == []
@@ -332,7 +321,7 @@ defmodule SchemectoTest do
 
       fields = [
         %{name: :title, type: :string},
-        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/2)}
+        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/1)}
       ]
 
       params = %{
@@ -343,9 +332,7 @@ defmodule SchemectoTest do
         ]
       }
 
-      changeset =
-        Schemecto.new(fields)
-        |> Ecto.Changeset.cast(params, [:title, :tags])
+      changeset = Schemecto.new(fields, params)
 
       assert changeset.valid?
 
@@ -368,13 +355,13 @@ defmodule SchemectoTest do
       # Define fields for the person that includes a nested address (one)
       person_fields = [
         %{name: :name, type: :string},
-        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/2)}
+        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/1)}
       ]
 
       # Top level has a list of people (many)
       fields = [
         %{name: :company, type: :string},
-        %{name: :employees, type: Schemecto.many(person_fields, with: &validate_person/2)}
+        %{name: :employees, type: Schemecto.many(person_fields, with: &validate_person/1)}
       ]
 
       params = %{
@@ -399,9 +386,7 @@ defmodule SchemectoTest do
         ]
       }
 
-      changeset =
-        Schemecto.new(fields)
-        |> Ecto.Changeset.cast(params, [:company, :employees])
+      changeset = Schemecto.new(fields, params)
 
       assert changeset.valid?
       assert Ecto.Changeset.get_change(changeset, :company) == "Acme Corp"
@@ -462,7 +447,7 @@ defmodule SchemectoTest do
 
       fields = [
         %{name: :name, type: :string},
-        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/2)}
+        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/1)}
       ]
 
       changeset = Schemecto.new(fields)
@@ -493,7 +478,7 @@ defmodule SchemectoTest do
 
       fields = [
         %{name: :title, type: :string},
-        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/2)}
+        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/1)}
       ]
 
       changeset = Schemecto.new(fields)
@@ -526,12 +511,12 @@ defmodule SchemectoTest do
 
       person_fields = [
         %{name: :name, type: :string},
-        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address_simple/2)}
+        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address_simple/1)}
       ]
 
       fields = [
         %{name: :company, type: :string},
-        %{name: :employees, type: Schemecto.many(person_fields, with: &validate_person/2)}
+        %{name: :employees, type: Schemecto.many(person_fields, with: &validate_person/1)}
       ]
 
       changeset = Schemecto.new(fields)
@@ -825,9 +810,8 @@ defmodule SchemectoTest do
         %{name: :zip, type: :string}
       ]
 
-      validate_address = fn changeset, params ->
+      validate_address = fn changeset ->
         changeset
-        |> Ecto.Changeset.cast(params, [:street, :zip])
         |> Ecto.Changeset.validate_required([:street])
         |> Ecto.Changeset.validate_length(:zip, is: 5)
       end

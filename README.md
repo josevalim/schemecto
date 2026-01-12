@@ -30,19 +30,17 @@ defmodule Example do
           %{name: :city, type: :string},
           %{name: :zip, type: :string}
         ],
-        with: &Example.validate_address/2
+        with: &Example.validate_address/1
       )}
     ]
 
-    Schemecto.new(fields)
-    |> Ecto.Changeset.cast(params, [:name, :email, :address])
+    Schemecto.new(fields, params)
     |> Ecto.Changeset.validate_required([:name, :email])
     |> Ecto.Changeset.validate_format(:email, ~r/@/)
   end
 
-  def validate_address(changeset, params) do
+  def validate_address(changeset) do
     changeset
-    |> Ecto.Changeset.cast(params, [:street, :city, :zip])
     |> Ecto.Changeset.validate_required([:street, :city])
     |> Ecto.Changeset.validate_length(:zip, is: 5)
   end

@@ -21,19 +21,25 @@ defmodule Schemecto.Many do
   def cast(nil, _params), do: {:ok, nil}
 
   def cast(values, %{changeset: changeset, with: fun}) when is_list(values) do
-    # Validate each value in the list and collect results
+    keys = Map.keys(changeset.types)
+
     {valid_values, all_errors} =
       values
       |> Enum.with_index()
       |> Enum.reduce({[], []}, fn {value, index}, {valid_acc, error_acc} ->
         if is_map(value) do
-          # Call the validation function with the changeset and the input value
-          case fun.(changeset, value) do
+          changeset =
+            if value == %{} do
+              changeset
+            else
+              Ecto.Changeset.cast(changeset, value, keys)
+            end
+
+          case fun.(changeset) do
             %Ecto.Changeset{valid?: true} = cs ->
               {[Ecto.Changeset.apply_changes(cs) | valid_acc], error_acc}
 
             %Ecto.Changeset{valid?: false, errors: errors} ->
-              # Add index information to the errors
               indexed_errors = [{index, errors} | error_acc]
               {valid_acc, indexed_errors}
           end

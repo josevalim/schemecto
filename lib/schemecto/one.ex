@@ -14,8 +14,14 @@ defmodule Schemecto.One do
   def cast(nil, _params), do: {:ok, nil}
 
   def cast(value, %{changeset: changeset, with: fun}) when is_map(value) do
-    # Call the validation function with the changeset and the input value
-    case fun.(changeset, value) do
+    changeset =
+      if value == %{} do
+        changeset
+      else
+        Ecto.Changeset.cast(changeset, value, Map.keys(changeset.types))
+      end
+
+    case fun.(changeset) do
       %Ecto.Changeset{valid?: true} = cs ->
         {:ok, Ecto.Changeset.apply_changes(cs)}
 
