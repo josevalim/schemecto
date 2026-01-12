@@ -133,36 +133,55 @@ defmodule Schemecto do
   defp build_changeset(fields) do
     {types, defaults, metadata_validations} = extract_field_info(fields)
 
-    changeset = Ecto.Changeset.change({defaults, types}, %{})
+    changeset = Ecto.Changeset.change({Map.new(defaults), types}, %{})
     %{changeset | validations: metadata_validations ++ changeset.validations}
   end
 
   # Extracts types, defaults, and metadata validations from field definitions
   defp extract_field_info(fields) do
-    Enum.reduce(fields, {%{}, %{}, []}, fn field, {types_acc, defaults_acc, metadata_acc} ->
+    Enum.reduce(fields, {%{}, [], []}, fn field, {types_acc, defaults_acc, metadata_acc} ->
       name = Map.fetch!(field, :name)
       type = Map.fetch!(field, :type)
 
-      # Add to types map
+      if Map.has_key?(types_acc, name) do
+        raise ArgumentError, "duplicate field #{inspect(name)} given to Schemecto"
+      end
+
       types_acc = Map.put(types_acc, name, type)
 
-      # Add to defaults if present
       defaults_acc =
-        case Map.fetch(field, :default) do
-          {:ok, default} -> Map.put(defaults_acc, name, default)
-          :error -> defaults_acc
+        case field do
+          %{default: default} -> [{name, default} | defaults_acc]
+          %{} -> defaults_acc
         end
 
-      # Build metadata map for this field
-      metadata = %{}
-      metadata = if Map.has_key?(field, :description), do: Map.put(metadata, :description, field.description), else: metadata
-      metadata = if Map.has_key?(field, :title), do: Map.put(metadata, :title, field.title), else: metadata
-      metadata = if Map.has_key?(field, :deprecated), do: Map.put(metadata, :deprecated, field.deprecated), else: metadata
+      metadata =
+        Enum.flat_map(field, fn
+          {:name, name} when is_atom(name) ->
+            []
 
-      # Add metadata validation if there's any metadata
+          {:type, _type} ->
+            []
+
+          {:default, _} ->
+            []
+
+          {:deprecated, boolean} when is_boolean(boolean) ->
+            [{:deprecated, boolean}]
+
+          {:title, string} when is_binary(string) ->
+            [{:title, string}]
+
+          {:description, string} when is_binary(string) ->
+            [{:description, string}]
+
+          {name, _value} ->
+            raise ArgumentError, "unknown key #{inspect(name)} in #{inspect(field)}"
+        end)
+
       metadata_acc =
-        if map_size(metadata) > 0 do
-          [{name, {:schemecto_metadata, metadata}} | metadata_acc]
+        if metadata != [] do
+          [{name, {:schemecto_metadata, Map.new(metadata)}} | metadata_acc]
         else
           metadata_acc
         end
@@ -219,6 +238,10 @@ defmodule Schemecto do
       Map.put(result, "required", required_fields)
     end
   end
+
+  # For compatibility with Ecto earlier than v3.12
+  defp type_to_json_schema({:parameterized, mod, arg}),
+    do: type_to_json_schema({:parameterized, {mod, arg}})
 
   defp type_to_json_schema({:parameterized, {Ecto.Enum, params}} = type) do
     Ecto.Enum.type(params)

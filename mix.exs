@@ -27,7 +27,7 @@ defmodule Schemecto.MixProject do
 
   defp deps do
     [
-      {:ecto, "~> 3.12"},
+      {:ecto, "~> 3.7"},
       {:ex_doc, "~> 0.34", only: :docs}
     ]
   end
