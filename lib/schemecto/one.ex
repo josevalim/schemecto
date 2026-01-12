@@ -13,10 +13,7 @@ defmodule Schemecto.One do
   @impl true
   def cast(nil, _params), do: {:ok, nil}
 
-  def cast(value, %{types: types, with: fun, defaults: defaults}) when is_map(value) do
-    # Create a changeset with the specified types and defaults
-    changeset = Ecto.Changeset.change({defaults, types})
-
+  def cast(value, %{changeset: changeset, with: fun}) when is_map(value) do
     # Call the validation function with the changeset and the input value
     case fun.(changeset, value) do
       %Ecto.Changeset{valid?: true} = cs ->

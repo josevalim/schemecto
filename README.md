@@ -4,21 +4,25 @@ Schemecto provides schemaless Ecto changesets with support for nested schemaless
 
 ## Usage
 
-Define types and validation functions for your data structures:
+Define fields and validation functions for your data structures:
 
 ```elixir
 defmodule Example do
   def changeset(params) do
-    types = %{
-      name: :string,
-      email: :string,
-      address: Schemecto.one(
-        %{street: :string, city: :string, zip: :string},
+    fields = [
+      %{name: :name, type: :string, title: "Full Name"},
+      %{name: :email, type: :string, description: "User email address"},
+      %{name: :address, type: Schemecto.one(
+        [
+          %{name: :street, type: :string},
+          %{name: :city, type: :string},
+          %{name: :zip, type: :string}
+        ],
         with: &Example.validate_address/2
-      )
-    }
+      )}
+    ]
 
-    Schemecto.new(types)
+    Schemecto.new(fields)
     |> Ecto.Changeset.cast(params, [:name, :email, :address])
     |> Ecto.Changeset.validate_required([:name, :email])
     |> Ecto.Changeset.validate_format(:email, ~r/@/)
@@ -33,7 +37,7 @@ defmodule Example do
 end
 ```
 
-Since Schemecto is built on Ecto changesets, you can use all standard Ecto validation functions. The types map can be constructed dynamically at runtime, making it ideal for scenarios where the schema must be composed at runtime.
+Since Schemecto is built on Ecto changesets, you can use all standard Ecto validation functions. The field list can be constructed dynamically at runtime, making it ideal for scenarios where the schema must be composed at runtime. Each field definition supports metadata like title, description, deprecated, and default values.
 
 ## JSON Schema Generation
 
@@ -43,7 +47,7 @@ Convert your changesets to JSON Schema to generate API documentation, validate c
 Schemecto.to_json_schema(changeset)
 ```
 
-The generated schema includes required fields, format patterns, length constraints, numeric bounds, and enum fields from your changeset. For instance, the changeset above will emit:
+The generated schema includes field metadata, required fields, format patterns, length constraints, numeric bounds, and enum values from your changeset. For instance, the changeset above will emit:
 
 ```json
 {
@@ -68,10 +72,12 @@ The generated schema includes required fields, format patterns, length constrain
     },
     "email": {
       "type": "string",
+      description: "User email address",
       "pattern": "@"
     },
     "name": {
-      "type": "string"
+      "type": "string",
+      "title": "Full name"
     }
   },
   "required": ["name", "email"]

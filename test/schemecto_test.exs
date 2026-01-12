@@ -27,32 +27,42 @@ defmodule SchemectoTest do
     |> Ecto.Changeset.validate_required([:street, :city])
   end
 
-  describe "new/2" do
+  describe "new/1" do
     test "creates a schemaless changeset with empty defaults" do
-      types = %{name: :string, age: :integer}
-      changeset = Schemecto.new(types)
+      fields = [
+        %{name: :name, type: :string},
+        %{name: :age, type: :integer}
+      ]
+
+      changeset = Schemecto.new(fields)
 
       assert %Ecto.Changeset{} = changeset
       assert changeset.data == %{}
-      assert changeset.types == types
+      assert changeset.types == %{name: :string, age: :integer}
       assert changeset.valid?
     end
 
     test "creates a schemaless changeset with defaults" do
-      types = %{name: :string, age: :integer}
-      defaults = %{name: "Alice"}
-      changeset = Schemecto.new(types, defaults: defaults)
+      fields = [
+        %{name: :name, type: :string, default: "Alice"},
+        %{name: :age, type: :integer}
+      ]
+
+      changeset = Schemecto.new(fields)
 
       assert %Ecto.Changeset{} = changeset
-      assert changeset.data == defaults
-      assert changeset.types == types
+      assert changeset.data == %{name: "Alice"}
+      assert changeset.types == %{name: :string, age: :integer}
     end
 
     test "can cast params onto the changeset" do
-      types = %{name: :string, age: :integer}
+      fields = [
+        %{name: :name, type: :string},
+        %{name: :age, type: :integer}
+      ]
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.cast(%{name: "Bob", age: 25}, [:name, :age])
 
       assert changeset.valid?
@@ -63,13 +73,17 @@ defmodule SchemectoTest do
 
   describe "one/2" do
     test "validates nested data successfully" do
-      address_types = %{street: :string, city: :string, zip: :string}
+      address_fields = [
+        %{name: :street, type: :string},
+        %{name: :city, type: :string},
+        %{name: :zip, type: :string}
+      ]
 
-      types = %{
-        name: :string,
-        email: :string,
-        address: Schemecto.one(address_types, with: &validate_address/2)
-      }
+      fields = [
+        %{name: :name, type: :string},
+        %{name: :email, type: :string},
+        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/2)}
+      ]
 
       params = %{
         name: "John Doe",
@@ -82,7 +96,7 @@ defmodule SchemectoTest do
       }
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.cast(params, [:name, :email, :address])
 
       assert changeset.valid?
@@ -96,12 +110,16 @@ defmodule SchemectoTest do
     end
 
     test "handles invalid nested data" do
-      address_types = %{street: :string, city: :string, zip: :string}
+      address_fields = [
+        %{name: :street, type: :string},
+        %{name: :city, type: :string},
+        %{name: :zip, type: :string}
+      ]
 
-      types = %{
-        name: :string,
-        address: Schemecto.one(address_types, with: &validate_address/2)
-      }
+      fields = [
+        %{name: :name, type: :string},
+        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/2)}
+      ]
 
       params = %{
         name: "Jane Doe",
@@ -112,7 +130,7 @@ defmodule SchemectoTest do
       }
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.cast(params, [:name, :address])
 
       refute changeset.valid?
@@ -126,12 +144,16 @@ defmodule SchemectoTest do
     end
 
     test "handles nil nested data" do
-      address_types = %{street: :string, city: :string, zip: :string}
+      address_fields = [
+        %{name: :street, type: :string},
+        %{name: :city, type: :string},
+        %{name: :zip, type: :string}
+      ]
 
-      types = %{
-        name: :string,
-        address: Schemecto.one(address_types, with: &validate_address/2)
-      }
+      fields = [
+        %{name: :name, type: :string},
+        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/2)}
+      ]
 
       params = %{
         name: "Jane Doe",
@@ -139,7 +161,7 @@ defmodule SchemectoTest do
       }
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.cast(params, [:name, :address])
 
       assert changeset.valid?
@@ -147,13 +169,17 @@ defmodule SchemectoTest do
     end
 
     test "uses defaults in nested changesets" do
-      address_types = %{street: :string, city: :string, zip: :string, country: :string}
+      address_fields = [
+        %{name: :street, type: :string},
+        %{name: :city, type: :string},
+        %{name: :zip, type: :string},
+        %{name: :country, type: :string, default: "US"}
+      ]
 
-      types = %{
-        name: :string,
-        address:
-          Schemecto.one(address_types, with: &validate_address/2, defaults: %{country: "US"})
-      }
+      fields = [
+        %{name: :name, type: :string},
+        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/2)}
+      ]
 
       params = %{
         name: "Alice",
@@ -165,7 +191,7 @@ defmodule SchemectoTest do
       }
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.cast(params, [:name, :address])
 
       assert changeset.valid?
@@ -180,12 +206,15 @@ defmodule SchemectoTest do
 
   describe "many/2" do
     test "validates list of nested data successfully" do
-      tag_types = %{name: :string, color: :string}
+      tag_fields = [
+        %{name: :name, type: :string},
+        %{name: :color, type: :string}
+      ]
 
-      types = %{
-        title: :string,
-        tags: Schemecto.many(tag_types, with: &validate_tag/2)
-      }
+      fields = [
+        %{name: :title, type: :string},
+        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/2)}
+      ]
 
       params = %{
         title: "My Post",
@@ -197,7 +226,7 @@ defmodule SchemectoTest do
       }
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.cast(params, [:title, :tags])
 
       assert changeset.valid?
@@ -214,12 +243,15 @@ defmodule SchemectoTest do
     end
 
     test "handles invalid nested data in list" do
-      tag_types = %{name: :string, color: :string}
+      tag_fields = [
+        %{name: :name, type: :string},
+        %{name: :color, type: :string}
+      ]
 
-      types = %{
-        title: :string,
-        tags: Schemecto.many(tag_types, with: &validate_tag/2)
-      }
+      fields = [
+        %{name: :title, type: :string},
+        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/2)}
+      ]
 
       params = %{
         title: "My Post",
@@ -231,7 +263,7 @@ defmodule SchemectoTest do
       }
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.cast(params, [:title, :tags])
 
       refute changeset.valid?
@@ -244,12 +276,15 @@ defmodule SchemectoTest do
     end
 
     test "handles nil for many" do
-      tag_types = %{name: :string, color: :string}
+      tag_fields = [
+        %{name: :name, type: :string},
+        %{name: :color, type: :string}
+      ]
 
-      types = %{
-        title: :string,
-        tags: Schemecto.many(tag_types, with: &validate_tag/2)
-      }
+      fields = [
+        %{name: :title, type: :string},
+        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/2)}
+      ]
 
       params = %{
         title: "My Post",
@@ -257,7 +292,7 @@ defmodule SchemectoTest do
       }
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.cast(params, [:title, :tags])
 
       assert changeset.valid?
@@ -265,12 +300,15 @@ defmodule SchemectoTest do
     end
 
     test "handles empty list" do
-      tag_types = %{name: :string, color: :string}
+      tag_fields = [
+        %{name: :name, type: :string},
+        %{name: :color, type: :string}
+      ]
 
-      types = %{
-        title: :string,
-        tags: Schemecto.many(tag_types, with: &validate_tag/2)
-      }
+      fields = [
+        %{name: :title, type: :string},
+        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/2)}
+      ]
 
       params = %{
         title: "My Post",
@@ -278,7 +316,7 @@ defmodule SchemectoTest do
       }
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.cast(params, [:title, :tags])
 
       assert changeset.valid?
@@ -286,12 +324,16 @@ defmodule SchemectoTest do
     end
 
     test "uses defaults in nested changesets for many" do
-      tag_types = %{name: :string, color: :string, priority: :integer}
+      tag_fields = [
+        %{name: :name, type: :string},
+        %{name: :color, type: :string},
+        %{name: :priority, type: :integer, default: 0}
+      ]
 
-      types = %{
-        title: :string,
-        tags: Schemecto.many(tag_types, with: &validate_tag/2, defaults: %{priority: 0})
-      }
+      fields = [
+        %{name: :title, type: :string},
+        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/2)}
+      ]
 
       params = %{
         title: "My Post",
@@ -302,7 +344,7 @@ defmodule SchemectoTest do
       }
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.cast(params, [:title, :tags])
 
       assert changeset.valid?
@@ -316,20 +358,24 @@ defmodule SchemectoTest do
 
   describe "integration" do
     test "one nested inside many" do
-      # Define types for the nested address (one)
-      address_types = %{street: :string, city: :string, zip: :string}
+      # Define fields for the nested address (one)
+      address_fields = [
+        %{name: :street, type: :string},
+        %{name: :city, type: :string},
+        %{name: :zip, type: :string}
+      ]
 
-      # Define types for the person that includes a nested address (one)
-      person_types = %{
-        name: :string,
-        address: Schemecto.one(address_types, with: &validate_address/2)
-      }
+      # Define fields for the person that includes a nested address (one)
+      person_fields = [
+        %{name: :name, type: :string},
+        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/2)}
+      ]
 
       # Top level has a list of people (many)
-      types = %{
-        company: :string,
-        employees: Schemecto.many(person_types, with: &validate_person/2)
-      }
+      fields = [
+        %{name: :company, type: :string},
+        %{name: :employees, type: Schemecto.many(person_fields, with: &validate_person/2)}
+      ]
 
       params = %{
         company: "Acme Corp",
@@ -354,7 +400,7 @@ defmodule SchemectoTest do
       }
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.cast(params, [:company, :employees])
 
       assert changeset.valid?
@@ -376,18 +422,18 @@ defmodule SchemectoTest do
 
   describe "to_json_schema/1" do
     test "converts all basic types to JSON schema properties" do
-      types = %{
-        name: :string,
-        age: :integer,
-        score: :float,
-        active: :boolean,
-        metadata: :map,
-        tags: {:array, :string},
-        priorities: {:array, :integer},
-        items: {:array, :any}
-      }
+      fields = [
+        %{name: :name, type: :string},
+        %{name: :age, type: :integer},
+        %{name: :score, type: :float},
+        %{name: :active, type: :boolean},
+        %{name: :metadata, type: :map},
+        %{name: :tags, type: {:array, :string}},
+        %{name: :priorities, type: {:array, :integer}},
+        %{name: :items, type: {:array, :any}}
+      ]
 
-      changeset = Schemecto.new(types)
+      changeset = Schemecto.new(fields)
       result = Schemecto.to_json_schema(changeset)
 
       assert result == %{
@@ -406,14 +452,18 @@ defmodule SchemectoTest do
     end
 
     test "converts nested one type to JSON schema" do
-      address_types = %{street: :string, city: :string, zip: :string}
+      address_fields = [
+        %{name: :street, type: :string},
+        %{name: :city, type: :string},
+        %{name: :zip, type: :string}
+      ]
 
-      types = %{
-        name: :string,
-        address: Schemecto.one(address_types, with: &validate_address/2)
-      }
+      fields = [
+        %{name: :name, type: :string},
+        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address/2)}
+      ]
 
-      changeset = Schemecto.new(types)
+      changeset = Schemecto.new(fields)
       result = Schemecto.to_json_schema(changeset)
 
       assert result == %{
@@ -434,14 +484,17 @@ defmodule SchemectoTest do
     end
 
     test "converts nested many type to JSON schema" do
-      tag_types = %{name: :string, color: :string}
+      tag_fields = [
+        %{name: :name, type: :string},
+        %{name: :color, type: :string}
+      ]
 
-      types = %{
-        title: :string,
-        tags: Schemecto.many(tag_types, with: &validate_tag/2)
-      }
+      fields = [
+        %{name: :title, type: :string},
+        %{name: :tags, type: Schemecto.many(tag_fields, with: &validate_tag/2)}
+      ]
 
-      changeset = Schemecto.new(types)
+      changeset = Schemecto.new(fields)
       result = Schemecto.to_json_schema(changeset)
 
       assert result == %{
@@ -464,19 +517,22 @@ defmodule SchemectoTest do
     end
 
     test "converts deeply nested types to JSON schema" do
-      address_types = %{street: :string, city: :string}
+      address_fields = [
+        %{name: :street, type: :string},
+        %{name: :city, type: :string}
+      ]
 
-      person_types = %{
-        name: :string,
-        address: Schemecto.one(address_types, with: &validate_address_simple/2)
-      }
+      person_fields = [
+        %{name: :name, type: :string},
+        %{name: :address, type: Schemecto.one(address_fields, with: &validate_address_simple/2)}
+      ]
 
-      types = %{
-        company: :string,
-        employees: Schemecto.many(person_types, with: &validate_person/2)
-      }
+      fields = [
+        %{name: :company, type: :string},
+        %{name: :employees, type: Schemecto.many(person_fields, with: &validate_person/2)}
+      ]
 
-      changeset = Schemecto.new(types)
+      changeset = Schemecto.new(fields)
       result = Schemecto.to_json_schema(changeset)
 
       assert result == %{
@@ -506,12 +562,12 @@ defmodule SchemectoTest do
     end
 
     test "converts custom Ecto types to JSON schema" do
-      types = %{
-        custom_name: Schemecto.Test.CustomString,
-        regular_name: :string
-      }
+      fields = [
+        %{name: :custom_name, type: Schemecto.Test.CustomString},
+        %{name: :regular_name, type: :string}
+      ]
 
-      changeset = Schemecto.new(types)
+      changeset = Schemecto.new(fields)
       result = Schemecto.to_json_schema(changeset)
 
       assert result == %{
@@ -524,10 +580,14 @@ defmodule SchemectoTest do
     end
 
     test "adds required fields to JSON schema" do
-      types = %{name: :string, age: :integer, email: :string}
+      fields = [
+        %{name: :name, type: :string},
+        %{name: :age, type: :integer},
+        %{name: :email, type: :string}
+      ]
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.validate_required([:name, :email])
 
       result = Schemecto.to_json_schema(changeset)
@@ -544,11 +604,14 @@ defmodule SchemectoTest do
     end
 
     test "converts Ecto.Enum string types to JSON schema" do
-      types = %{
-        status: Ecto.ParameterizedType.init(Ecto.Enum, values: [:pending, :active, :completed])
-      }
+      fields = [
+        %{
+          name: :status,
+          type: Ecto.ParameterizedType.init(Ecto.Enum, values: [:pending, :active, :completed])
+        }
+      ]
 
-      changeset = Schemecto.new(types)
+      changeset = Schemecto.new(fields)
       result = Schemecto.to_json_schema(changeset)
 
       assert result == %{
@@ -563,11 +626,14 @@ defmodule SchemectoTest do
     end
 
     test "converts Ecto.Enum integer types to JSON schema" do
-      types = %{
-        priority: Ecto.ParameterizedType.init(Ecto.Enum, values: [low: 1, medium: 2, high: 3])
-      }
+      fields = [
+        %{
+          name: :priority,
+          type: Ecto.ParameterizedType.init(Ecto.Enum, values: [low: 1, medium: 2, high: 3])
+        }
+      ]
 
-      changeset = Schemecto.new(types)
+      changeset = Schemecto.new(fields)
       result = Schemecto.to_json_schema(changeset)
 
       assert result == %{
@@ -584,10 +650,10 @@ defmodule SchemectoTest do
 
   describe "to_json_schema + validations" do
     test "extracts format validation to pattern" do
-      types = %{email: :string}
+      fields = [%{name: :email, type: :string}]
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.validate_format(:email, ~r/@/)
 
       result = Schemecto.to_json_schema(changeset)
@@ -601,10 +667,10 @@ defmodule SchemectoTest do
     end
 
     test "extracts inclusion validation to enum for lists" do
-      types = %{status: :string}
+      fields = [%{name: :status, type: :string}]
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.validate_inclusion(:status, ["pending", "active", "completed"])
 
       result = Schemecto.to_json_schema(changeset)
@@ -618,10 +684,10 @@ defmodule SchemectoTest do
     end
 
     test "extracts inclusion validation with range to min/max" do
-      types = %{age: :integer}
+      fields = [%{name: :age, type: :integer}]
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.validate_inclusion(:age, 0..120)
 
       result = Schemecto.to_json_schema(changeset)
@@ -635,10 +701,10 @@ defmodule SchemectoTest do
     end
 
     test "extracts length validation for strings with min/max" do
-      types = %{title: :string}
+      fields = [%{name: :title, type: :string}]
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.validate_length(:title, min: 1, max: 100)
 
       result = Schemecto.to_json_schema(changeset)
@@ -652,10 +718,10 @@ defmodule SchemectoTest do
     end
 
     test "extracts length validation for strings with is" do
-      types = %{code: :string}
+      fields = [%{name: :code, type: :string}]
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.validate_length(:code, is: 6)
 
       result = Schemecto.to_json_schema(changeset)
@@ -669,10 +735,10 @@ defmodule SchemectoTest do
     end
 
     test "extracts length validation for arrays" do
-      types = %{tags: {:array, :string}}
+      fields = [%{name: :tags, type: {:array, :string}}]
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.validate_length(:tags, min: 1, max: 5)
 
       result = Schemecto.to_json_schema(changeset)
@@ -691,10 +757,10 @@ defmodule SchemectoTest do
     end
 
     test "extracts number validations" do
-      types = %{age: :integer}
+      fields = [%{name: :age, type: :integer}]
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.validate_number(:age, greater_than_or_equal_to: 0, less_than: 150)
 
       result = Schemecto.to_json_schema(changeset)
@@ -708,10 +774,10 @@ defmodule SchemectoTest do
     end
 
     test "extracts subset validation for array items" do
-      types = %{tags: {:array, :string}}
+      fields = [%{name: :tags, type: {:array, :string}}]
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.validate_subset(:tags, ["elixir", "erlang", "ecto"])
 
       result = Schemecto.to_json_schema(changeset)
@@ -728,10 +794,10 @@ defmodule SchemectoTest do
     end
 
     test "handles multiple validations on same field" do
-      types = %{title: :string}
+      fields = [%{name: :title, type: :string}]
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.validate_length(:title, min: 1)
         |> Ecto.Changeset.validate_length(:title, max: 100)
         |> Ecto.Changeset.validate_format(:title, ~r/^[A-Z]/)
@@ -752,7 +818,10 @@ defmodule SchemectoTest do
     end
 
     test "handles nested validations in one/many" do
-      address_types = %{street: :string, zip: :string}
+      address_fields = [
+        %{name: :street, type: :string},
+        %{name: :zip, type: :string}
+      ]
 
       validate_address = fn changeset, params ->
         changeset
@@ -761,12 +830,12 @@ defmodule SchemectoTest do
         |> Ecto.Changeset.validate_length(:zip, is: 5)
       end
 
-      types = %{
-        name: :string,
-        address: Schemecto.one(address_types, with: validate_address)
-      }
+      fields = [
+        %{name: :name, type: :string},
+        %{name: :address, type: Schemecto.one(address_fields, with: validate_address)}
+      ]
 
-      changeset = Schemecto.new(types)
+      changeset = Schemecto.new(fields)
       result = Schemecto.to_json_schema(changeset)
 
       assert result == %{
@@ -786,10 +855,10 @@ defmodule SchemectoTest do
     end
 
     test "raises when format validation on non-string field" do
-      types = %{age: :integer}
+      fields = [%{name: :age, type: :integer}]
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.validate_format(:age, ~r/\d+/)
 
       assert_raise ArgumentError, "validate_format can only be applied to string fields", fn ->
@@ -797,9 +866,39 @@ defmodule SchemectoTest do
       end
     end
 
+    test "extracts metadata fields to JSON schema" do
+      fields = [
+        %{name: :name, type: :string, title: "Full Name", description: "The user's full name"},
+        %{name: :age, type: :integer, description: "Age in years"},
+        %{name: :legacy_field, type: :string, deprecated: true}
+      ]
+
+      changeset = Schemecto.new(fields)
+      result = Schemecto.to_json_schema(changeset)
+
+      assert result == %{
+               "type" => "object",
+               "properties" => %{
+                 "name" => %{
+                   "type" => "string",
+                   "title" => "Full Name",
+                   "description" => "The user's full name"
+                 },
+                 "age" => %{
+                   "type" => "integer",
+                   "description" => "Age in years"
+                 },
+                 "legacy_field" => %{
+                   "type" => "string",
+                   "deprecated" => true
+                 }
+               }
+             }
+    end
+
     test "raises error for unknown type" do
-      types = %{name: :unknown_type}
-      changeset = Schemecto.new(types)
+      fields = [%{name: :name, type: :unknown_type}]
+      changeset = Schemecto.new(fields)
 
       assert_raise ArgumentError, "unknown type given to to_json_schema: :unknown_type", fn ->
         Schemecto.to_json_schema(changeset)

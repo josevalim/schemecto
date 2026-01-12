@@ -4,27 +4,31 @@ defmodule Schemecto do
   """
 
   @doc """
-  Creates a new schemaless changeset with the given types.
+  Creates a new schemaless changeset with the given field definitions.
 
   ## Parameters
 
-    * `types` - Map of field names to their types
-    * `opts` - Keyword list of options:
-      * `:defaults` - Default values for the changeset (default: `%{}`)
+    * `fields` - List of field definitions. Each field is a map with:
+      * `:name` - Field name (required)
+      * `:type` - Field type (required)
+      * `:description` - Human-readable description (optional)
+      * `:title` - Human-readable title (optional)
+      * `:deprecated` - Boolean indicating if field is deprecated (optional)
+      * `:default` - Default value for the field (optional)
 
   ## Examples
 
-      types = %{name: :string, age: :integer}
-      changeset = Schemecto.new(types)
+      fields = [
+        %{name: :name, type: :string, title: "Full Name"},
+        %{name: :age, type: :integer, default: 0, description: "Age in years"}
+      ]
+
+      changeset = Schemecto.new(fields)
       changeset = Ecto.Changeset.cast(changeset, %{name: "John", age: 30}, [:name, :age])
 
-      # With defaults
-      changeset = Schemecto.new(types, defaults: %{age: 0})
-
   """
-  def new(types, opts \\ []) when is_map(types) and is_list(opts) do
-    defaults = Keyword.get(opts, :defaults, %{})
-    Ecto.Changeset.change({defaults, types}, %{})
+  def new(fields) when is_list(fields) do
+    build_changeset(fields)
   end
 
   @doc """
@@ -32,11 +36,10 @@ defmodule Schemecto do
 
   ## Parameters
 
-    * `types` - Map of field names to their types for the nested changeset
+    * `fields` - List of field definitions for the nested changeset
     * `opts` - Keyword list of options:
       * `:with` - A 2-arity function that receives a changeset and params,
         and returns a validated changeset (required)
-      * `:defaults` - Default values for the nested changeset (default: `%{}`)
 
   ## Examples
 
@@ -46,33 +49,36 @@ defmodule Schemecto do
         |> Ecto.Changeset.validate_required([:street, :city])
       end
 
-      types = %{
-        name: :string,
-        email: :string,
-        address: Schemecto.one(
-          %{street: :string,
-            city: :string,
-            zip: :string
-          },
+      fields = [
+        %{name: :name, type: :string},
+        %{name: :email, type: :string},
+        %{name: :address, type: Schemecto.one(
+          [
+            %{name: :street, type: :string},
+            %{name: :city, type: :string},
+            %{name: :zip, type: :string}
+          ],
           with: &validate_address/2
-        )
-      }
+        )}
+      ]
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.cast(params, [:name, :email, :address])
 
   """
-  def one(types, opts) when is_map(types) and is_list(opts) do
+  def one(fields, opts) when is_list(fields) and is_list(opts) do
     function = Keyword.fetch!(opts, :with)
-    defaults = Keyword.get(opts, :defaults, %{})
 
     if not is_function(function, 2) do
       raise ArgumentError,
             "expected :with option to be a 2-arity function, got: #{inspect(function)}"
     end
 
-    Ecto.ParameterizedType.init(Schemecto.One, %{types: types, with: function, defaults: defaults})
+    Ecto.ParameterizedType.init(Schemecto.One, %{
+      changeset: build_changeset(fields),
+      with: function
+    })
   end
 
   @doc """
@@ -80,11 +86,10 @@ defmodule Schemecto do
 
   ## Parameters
 
-    * `types` - Map of field names to their types for the nested changeset
+    * `fields` - List of field definitions for each nested changeset
     * `opts` - Keyword list of options:
       * `:with` - A 2-arity function that receives a changeset and params,
         and returns a validated changeset (required)
-      * `:defaults` - Default values for each nested changeset (default: `%{}`)
 
   ## Examples
 
@@ -94,22 +99,24 @@ defmodule Schemecto do
         |> Ecto.Changeset.validate_required([:name])
       end
 
-      types = %{
-        title: :string,
-        tags: Schemecto.many(
-          %{name: :string, color: :string},
+      fields = [
+        %{name: :title, type: :string},
+        %{name: :tags, type: Schemecto.many(
+          [
+            %{name: :name, type: :string},
+            %{name: :color, type: :string}
+          ],
           with: &validate_tag/2
-        )
-      }
+        )}
+      ]
 
       changeset =
-        Schemecto.new(types)
+        Schemecto.new(fields)
         |> Ecto.Changeset.cast(params, [:title, :tags])
 
   """
-  def many(types, opts) when is_map(types) and is_list(opts) do
+  def many(fields, opts) when is_list(fields) and is_list(opts) do
     function = Keyword.fetch!(opts, :with)
-    defaults = Keyword.get(opts, :defaults, %{})
 
     if not is_function(function, 2) do
       raise ArgumentError,
@@ -117,10 +124,51 @@ defmodule Schemecto do
     end
 
     Ecto.ParameterizedType.init(Schemecto.Many, %{
-      types: types,
-      with: function,
-      defaults: defaults
+      changeset: build_changeset(fields),
+      with: function
     })
+  end
+
+  # Builds a changeset from field definitions
+  defp build_changeset(fields) do
+    {types, defaults, metadata_validations} = extract_field_info(fields)
+
+    changeset = Ecto.Changeset.change({defaults, types}, %{})
+    %{changeset | validations: metadata_validations ++ changeset.validations}
+  end
+
+  # Extracts types, defaults, and metadata validations from field definitions
+  defp extract_field_info(fields) do
+    Enum.reduce(fields, {%{}, %{}, []}, fn field, {types_acc, defaults_acc, metadata_acc} ->
+      name = Map.fetch!(field, :name)
+      type = Map.fetch!(field, :type)
+
+      # Add to types map
+      types_acc = Map.put(types_acc, name, type)
+
+      # Add to defaults if present
+      defaults_acc =
+        case Map.fetch(field, :default) do
+          {:ok, default} -> Map.put(defaults_acc, name, default)
+          :error -> defaults_acc
+        end
+
+      # Build metadata map for this field
+      metadata = %{}
+      metadata = if Map.has_key?(field, :description), do: Map.put(metadata, :description, field.description), else: metadata
+      metadata = if Map.has_key?(field, :title), do: Map.put(metadata, :title, field.title), else: metadata
+      metadata = if Map.has_key?(field, :deprecated), do: Map.put(metadata, :deprecated, field.deprecated), else: metadata
+
+      # Add metadata validation if there's any metadata
+      metadata_acc =
+        if map_size(metadata) > 0 do
+          [{name, {:schemecto_metadata, metadata}} | metadata_acc]
+        else
+          metadata_acc
+        end
+
+      {types_acc, defaults_acc, metadata_acc}
+    end)
   end
 
   @doc """
@@ -133,13 +181,16 @@ defmodule Schemecto do
 
   ## Examples
 
-      iex> types = %{name: :string, age: :integer}
-      iex> changeset = Schemecto.new(types)
+      iex> fields = [
+      ...>   %{name: :name, type: :string, title: "Full Name"},
+      ...>   %{name: :age, type: :integer}
+      ...> ]
+      iex> changeset = Schemecto.new(fields)
       iex> Schemecto.to_json_schema(changeset)
       %{
         "type" => "object",
         "properties" => %{
-          "name" => %{"type" => "string"},
+          "name" => %{"type" => "string", "title" => "Full Name"},
           "age" => %{"type" => "integer"}
         }
       }
@@ -175,21 +226,17 @@ defmodule Schemecto do
     |> Map.put("enum", Ecto.Enum.dump_values(%{field: type}, :field))
   end
 
-  defp type_to_json_schema({:parameterized, {Schemecto.One, one}}) do
-    %{types: types, with: fun, defaults: defaults} = one
-
-    Ecto.Changeset.change({defaults, types})
+  defp type_to_json_schema({:parameterized, {Schemecto.One, %{changeset: changeset, with: fun}}}) do
+    changeset
     |> fun.(%{})
     |> to_json_schema()
   end
 
-  defp type_to_json_schema({:parameterized, {Schemecto.Many, many}}) do
-    %{types: types, with: fun, defaults: defaults} = many
-
+  defp type_to_json_schema({:parameterized, {Schemecto.Many, %{changeset: changeset, with: fun}}}) do
     %{
       "type" => "array",
       "items" =>
-        Ecto.Changeset.change({defaults, types})
+        changeset
         |> fun.(%{})
         |> to_json_schema()
     }
@@ -275,6 +322,13 @@ defmodule Schemecto do
     update_in(schema["items"], fn items ->
       Map.put(items || %{}, "enum", values)
     end)
+  end
+
+  defp apply_validation({:schemecto_metadata, metadata}, schema) do
+    schema
+    |> maybe_put("description", Map.get(metadata, :description))
+    |> maybe_put("title", Map.get(metadata, :title))
+    |> maybe_put("deprecated", Map.get(metadata, :deprecated))
   end
 
   defp apply_validation(_unknown, schema), do: schema
