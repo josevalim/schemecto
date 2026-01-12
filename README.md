@@ -72,7 +72,7 @@ The generated schema includes field metadata, required fields, format patterns, 
     },
     "email": {
       "type": "string",
-      description: "User email address",
+      "description": "User email address",
       "pattern": "@"
     },
     "name": {
