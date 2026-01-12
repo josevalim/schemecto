@@ -280,6 +280,7 @@ defmodule Schemecto do
   defp do_type_to_json_schema(:string), do: %{"type" => "string"}
   defp do_type_to_json_schema(:integer), do: %{"type" => "integer"}
   defp do_type_to_json_schema(:float), do: %{"type" => "number"}
+  defp do_type_to_json_schema(:decimal), do: %{"type" => "number"}
   defp do_type_to_json_schema(:boolean), do: %{"type" => "boolean"}
   defp do_type_to_json_schema(:map), do: %{"type" => "object"}
 

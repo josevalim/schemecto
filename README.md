@@ -102,6 +102,7 @@ Ecto type               | JSON type
 :---------------------- | :--------------------
 `:integer`              | `integer`
 `:float`                | `number`
+`:decimal`              | `number`
 `:boolean`              | `boolean`
 `:string`               | `string`
 `:map`                  | `object`
