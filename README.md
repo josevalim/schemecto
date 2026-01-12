@@ -2,6 +2,18 @@
 
 Schemecto provides schemaless Ecto changesets with support for nested schemaless changesets and JSON Schema generation.
 
+## Installation
+
+Add `schemecto` to your dependencies in `mix.exs`:
+
+```elixir
+def deps do
+  [
+    {:schemecto, github: "josevalim/schemecto"}
+  ]
+end
+```
+
 ## Usage
 
 Define fields and validation functions for your data structures:
@@ -84,17 +96,24 @@ The generated schema includes field metadata, required fields, format patterns, 
 }
 ```
 
-## Installation
+## Supported types
 
-Add `schemecto` to your dependencies in `mix.exs`:
+Ecto type               | JSON type
+:---------------------- | :--------------------
+`:integer`              | `integer`
+`:float`                | `number`
+`:boolean`              | `boolean`
+`:string`               | `string`
+`:map`                  | `object`
+`{:array, type}`        | `array` of `type`
+`{:array, :any}`        | `array` of `object`
+`Ecto.Enum` of `type    | `enum` of `type`
 
-```elixir
-def deps do
-  [
-    {:schemecto, github: "josevalim/schemecto"}
-  ]
-end
-```
+Custom Ecto types and parameterized types are also supported as long as
+they emit one of the types above. More types can be added in the future too.
+
+`Schemecto.one/2` and `Schemecto.many/2` should be preferred instead of
+`:map` when the fields are known upfront.
 
 ## License
 
