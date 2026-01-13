@@ -1,6 +1,6 @@
 # Schemecto
 
-Schemecto provides schemaless Ecto changesets with support for nested schemaless changesets and JSON Schema generation.
+Schemecto provides schemaless Ecto changesets with support for JSON Schema generation and nested schemaless changesets.
 
 ## Installation
 
